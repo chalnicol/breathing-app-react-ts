@@ -1,23 +1,31 @@
-import { useState } from "react";
-import BreathingSettings from "./components/BreathingSettings";
+import WelcomeSpace from "./components/WelcomeSpace";
 import BreathingRoom from "./components/BreathingRoom";
 import type { SessionSettings } from "./types";
+import { useState } from "react";
 
 export default function App() {
-	const [sessionSettings, setSessionSettings] =
-		useState<SessionSettings | null>(null);
+	// Keeps track of active session parameters. When null, show the Welcome screen.
+	const [activeSettings, setActiveSettings] = useState<SessionSettings | null>(
+		null,
+	);
+
+	const handleStartSession = (settings: SessionSettings) => {
+		setActiveSettings(settings);
+	};
+
+	const handleExitSession = () => {
+		setActiveSettings(null); // Instantly tears down the session room and unmounts GSAP hooks
+	};
 
 	return (
-		<main className="min-h-screen bg-slate-950 selection:bg-emerald-500/30">
-			{sessionSettings ? (
+		<main className="w-screen h-screen bg-slate-950 text-slate-100 antialiased overflow-hidden">
+			{activeSettings ? (
 				<BreathingRoom
-					settings={sessionSettings}
-					onExit={() => setSessionSettings(null)}
+					settings={activeSettings}
+					onExit={handleExitSession}
 				/>
 			) : (
-				<BreathingSettings
-					onStart={(settings) => setSessionSettings(settings)}
-				/>
+				<WelcomeSpace onStartSession={handleStartSession} />
 			)}
 		</main>
 	);
