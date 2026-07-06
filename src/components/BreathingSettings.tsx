@@ -22,6 +22,10 @@ export default function BreathingSettings({ onStart }: SettingsProps) {
 				type: limitType,
 				value: limitType === "duration" ? duration * 60 : reps,
 			},
+			variation: {
+				name: "Custom Calibration",
+				tag: "MANUAL PARAMETERS",
+			},
 		});
 	};
 

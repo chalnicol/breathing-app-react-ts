@@ -1,91 +1,29 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { gsap } from "gsap";
-import type { SessionSettings } from "../types";
+import type { PresetPattern, SessionSettings } from "../types";
 import SessionInfoModal from "./SessionInfoModal";
+import CustomSlider from "./CustomSlider";
+import { CORE_PRESETS } from "../constants/presets";
+
+import { useSliderAnimation } from "../hooks/useSliderAnimation";
 
 interface WelcomeProps {
 	onStartSession: (settings: SessionSettings) => void;
 }
 
-interface PresetPattern {
-	id: string;
-	name: string;
-	tag: string;
-	description: string;
-	scienceDetail: string;
-	guidelines: string[];
-	inhale: number;
-	hold: number;
-	exhale: number;
-}
-
 export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
-	const corePresets: PresetPattern[] = [
-		{
-			id: "cardiac",
-			name: "The 4-2-6 Rhythm Flow",
-			tag: "CARDIAC BALANCED",
-			description:
-				"Engineered specifically to maximize cardiac resonance by extending the exhalation window.",
-			scienceDetail:
-				"Extending your exhalation phase leverages your vagus nerve to slow your heart rate, lower vascular tension, and optimize heart rate variability (HRV) within minutes.",
-			guidelines: [
-				"Breathe deep into your lower belly, not your upper shoulders.",
-				"Inhale through your nose to increase systemic nitric oxide absorption.",
-				"Treat the 6-second exhalation phase like a slow mechanical release.",
-			],
-			inhale: 4,
-			hold: 2,
-			exhale: 6,
-		},
-		{
-			id: "box",
-			name: "The 4-4-4 Tactical Box",
-			tag: "COGNITIVE CLARITY",
-			description:
-				"The global operational standard for high-stress environments and sudden adrenaline surges.",
-			scienceDetail:
-				"Box breathing uses perfectly symmetrical intervals to clear carbon dioxide and normalize blood gas ratios. This halts the production of acute stress biomarkers.",
-			guidelines: [
-				"Maintain a steady, mechanical count across all four corners.",
-				"Keep the hold phases relaxed; do not clamp your throat shut.",
-				"Use this pattern to reset your focus before deep work or high-stakes tasks.",
-			],
-			inhale: 4,
-			hold: 4,
-			exhale: 4,
-		},
-		{
-			id: "sedation",
-			name: "The 7-4-8 Sleep Prep",
-			tag: "DEEP SEDATION",
-			description:
-				"An ultra-slow structural pattern designed to neutralize anxiety loops and prime the brain for rest.",
-			scienceDetail:
-				"By forcing an exceptionally long 7-second pull and a slow 8-second release, you clear latent residual tension from the intercostal muscle groups.",
-			guidelines: [
-				"Perform this cycle while seated comfortably or lying completely flat.",
-				"Allow your body to sink heavily into the surface on the 8-second exhale.",
-				"Excellent for combatting insomnia or quietening over-active racing thoughts.",
-			],
-			inhale: 7,
-			hold: 4,
-			exhale: 8,
-		},
-	];
-
 	const [currentIndex, setCurrentIndex] = useState<number>(0);
 	const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
 	const [inhale, setInhale] = useState<number>(4);
 	const [hold, setHold] = useState<number>(2);
 	const [exhale, setExhale] = useState<number>(6);
+
+	const [limitType, setLimitType] = useState<"duration" | "reps">("duration");
 	const [duration, setDuration] = useState<number>(300);
+	const [reps, setReps] = useState<number>(5);
 
 	const slideTrackRef = useRef<HTMLDivElement>(null);
-	const modalOverlayRef = useRef<HTMLDivElement>(null);
-	const modalBoxRef = useRef<HTMLDivElement>(null);
-	const metricGridRef = useRef<HTMLDivElement>(null);
 
 	const inhaleKnobRef = useRef<HTMLDivElement>(null);
 	const inhaleTrackRef = useRef<HTMLDivElement>(null);
@@ -93,15 +31,17 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 	const holdTrackRef = useRef<HTMLDivElement>(null);
 	const exhaleKnobRef = useRef<HTMLDivElement>(null);
 	const exhaleTrackRef = useRef<HTMLDivElement>(null);
+	const limitKnobRef = useRef<HTMLDivElement>(null);
+	const limitTrackRef = useRef<HTMLDivElement>(null);
 
-	const matchedPresetIdx = corePresets.findIndex(
+	const matchedPresetIdx = CORE_PRESETS.findIndex(
 		(p) => p.inhale === inhale && p.hold === hold && p.exhale === exhale,
 	);
 	const isCustomActive = matchedPresetIdx === -1;
 	const totalAvailableSlides = isCustomActive ? 4 : 3;
 
 	const allSlides: PresetPattern[] = [
-		...corePresets,
+		...CORE_PRESETS,
 		{
 			id: "custom",
 			name: "Custom Calibration Space",
@@ -117,13 +57,11 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 			inhale,
 			hold,
 			exhale,
+			defaultLimitType: limitType,
+			defaultLimitValue: limitType === "duration" ? duration : reps,
 		},
 	];
 
-	// Moves the track by exactly one slide-width, expressed as a percentage
-	// of the TRACK's own width (which is total * 100%). This is the part
-	// that was broken before — it assumed each slide was 100% of the
-	// container, which only holds true by coincidence.
 	const animateTrackTo = (index: number, total: number) => {
 		if (!slideTrackRef.current) return;
 		gsap.to(slideTrackRef.current, {
@@ -139,10 +77,16 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 		animateTrackTo(index, totalAvailableSlides);
 
 		if (index < 3) {
-			const target = corePresets[index];
+			const target = CORE_PRESETS[index];
 			setInhale(target.inhale);
 			setHold(target.hold);
 			setExhale(target.exhale);
+			setLimitType(target.defaultLimitType);
+			if (target.defaultLimitType === "duration") {
+				setDuration(target.defaultLimitValue);
+			} else {
+				setReps(target.defaultLimitValue);
+			}
 		}
 	};
 
@@ -163,124 +107,56 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 		totalAvailableSlides,
 	]);
 
-	const updateSliderVisuals = (
-		knobRef: React.RefObject<HTMLDivElement | null>,
-		trackRef: React.RefObject<HTMLDivElement | null>,
-		current: number,
-		max: number,
-		min = 0,
-	) => {
-		if (!knobRef.current || !trackRef.current) return;
-		const percentage = ((current - min) / (max - min)) * 100;
-
-		gsap.to(knobRef.current, {
-			left: `${percentage}%`,
-			xPercent: -50,
-			duration: 0.2,
-			ease: "power2.out",
-			overwrite: "auto",
-		});
-		gsap.to(trackRef.current, {
-			width: `${percentage}%`,
-			duration: 0.2,
-			ease: "power2.out",
-			overwrite: "auto",
-		});
-	};
-
-	useEffect(() => {
-		updateSliderVisuals(inhaleKnobRef, inhaleTrackRef, inhale, 12, 1);
-	}, [inhale]);
-	useEffect(() => {
-		updateSliderVisuals(holdKnobRef, holdTrackRef, hold, 12, 0);
-	}, [hold]);
-	useEffect(() => {
-		updateSliderVisuals(exhaleKnobRef, exhaleTrackRef, exhale, 16, 1);
-	}, [exhale]);
-
-	useEffect(() => {
-		if (isModalOpen) {
-			const tl = gsap.timeline();
-			tl.to(modalOverlayRef.current, {
-				opacity: 1,
-				duration: 0.2,
-				ease: "power1.out",
-			}).fromTo(
-				modalBoxRef.current,
-				{ y: 15, scale: 0.98, opacity: 0 },
-				{ y: 0, scale: 1, opacity: 1, duration: 0.25, ease: "power3.out" },
-				"-=0.05",
-			);
-
-			if (metricGridRef.current) {
-				metricGridRef.current
-					.querySelectorAll(".metric-val")
-					.forEach((el) => {
-						const targetVal = parseInt(
-							el.getAttribute("data-target") || "0",
-							10,
-						);
-						const counter = { val: 0 };
-						gsap.to(counter, {
-							val: targetVal,
-							duration: 0.4,
-							ease: "power2.out",
-							onUpdate: () => {
-								el.textContent = `${Math.floor(counter.val)}s`;
-							},
-						});
-					});
-			}
-		}
-	}, [isModalOpen]);
-
-	const closeModal = () => {
-		gsap.to(modalBoxRef.current, {
-			y: 10,
-			opacity: 0,
-			scale: 0.99,
-			duration: 0.15,
-			ease: "power2.in",
-			onComplete: () => {
-				gsap.to(modalOverlayRef.current, {
-					opacity: 0,
-					duration: 0.1,
-					onComplete: () => setIsModalOpen(false),
-				});
-			},
-		});
-	};
+	// Hooking extracted animation mechanics back into state variants
+	useSliderAnimation(inhaleKnobRef, inhaleTrackRef, inhale, 1, 12);
+	useSliderAnimation(holdKnobRef, holdTrackRef, hold, 0, 12);
+	useSliderAnimation(exhaleKnobRef, exhaleTrackRef, exhale, 1, 16);
+	useSliderAnimation(
+		limitKnobRef,
+		limitTrackRef,
+		limitType === "duration" ? duration : reps,
+		limitType === "duration" ? 60 : 1,
+		limitType === "duration" ? 900 : 20,
+	);
 
 	return (
-		<div className="fixed inset-0 w-screen h-screen bg-slate-950 text-slate-100 font-sans flex flex-col items-center justify-center m-0 p-4 overflow-y-auto selection:bg-emerald-400/20">
-			<div className="w-full max-w-sm space-y-3 py-1">
-				{/* Main Base Title Header */}
-				<div className="text-center">
-					<h1 className="text-base font-black tracking-widest text-white uppercase">
-						Breathe
+		<div className="fixed inset-0 w-screen h-screen bg-slate-950 flex flex-col items-center justify-center px-4 py-2 text-slate-100 font-sans overflow-y-auto selection:bg-emerald-400/20">
+			<div className="w-full max-w-md py-1 mx-auto space-y-4">
+				<div className="text-center space-y-1">
+					<h1 className="text-lg font-black tracking-[0.3em] uppercase font-sans">
+						<span className="text-white">Aura</span>
+						<span>.</span>
+						<span className="text-emerald-400">Drift</span>
 					</h1>
-					<p className="text-[9px] text-slate-500 font-mono tracking-wider">
-						Pacing Layout Engine
+					<p className="text-[9px] text-slate-400 font-mono tracking-widest uppercase opacity-75">
+						Structural Breath Control
 					</p>
 				</div>
-
-				{/* --- DENSE UNIFIED CHASSIS --- */}
 				<form
 					onSubmit={(e) => {
 						e.preventDefault();
 						onStartSession({
 							config: { inhale, hold, exhale },
-							limit: { type: "duration", value: duration },
+							limit:
+								limitType === "duration"
+									? { type: "duration", value: duration }
+									: { type: "reps", value: reps },
+							variation: {
+								name: isCustomActive
+									? "Custom Calibration"
+									: CORE_PRESETS[currentIndex].name,
+								tag: isCustomActive
+									? "MANUAL PARAMETERS"
+									: CORE_PRESETS[currentIndex].tag,
+							},
 						});
 					}}
 					className="bg-slate-900/40 border border-slate-900/60 rounded-xl p-4 space-y-3 backdrop-blur-md shadow-xl"
 				>
-					{/* Explicit Subsection Functional Label */}
 					<div className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase">
 						Select Breathing Variation
 					</div>
 
-					{/* Deck viewport — this is JUST a clipping window now, no bg/border of its own */}
 					<div className="w-full overflow-hidden relative">
 						<div
 							ref={slideTrackRef}
@@ -291,9 +167,10 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 								<div
 									key={slide.id}
 									className="shrink-0 px-1"
-									style={{ width: `${100 / totalAvailableSlides}%` }}
+									style={{
+										width: `${100 / totalAvailableSlides}%`,
+									}}
 								>
-									{/* Each slide gets its own frame + lighter fill */}
 									<div
 										className={`h-full rounded-lg border p-3 space-y-1.5 shadow-inner ${
 											slide.id === "custom"
@@ -317,16 +194,17 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 												</h3>
 											</div>
 
-											{/* Perfect Circle Information Button */}
-											<button
-												type="button"
-												onClick={() => setIsModalOpen(true)}
-												className="w-4 h-4 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 flex items-center justify-center text-[9px] font-mono font-bold text-slate-200 transition-colors cursor-pointer shadow-sm shrink-0"
-											>
-												?
-											</button>
+											{/* Explicitly check and skip info marker generation for customization space */}
+											{slide.id !== "custom" && (
+												<button
+													type="button"
+													onClick={() => setIsModalOpen(true)}
+													className="w-4 h-4 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 flex items-center justify-center text-[9px] font-mono font-bold text-slate-200 transition-colors cursor-pointer shadow-sm shrink-0"
+												>
+													?
+												</button>
+											)}
 										</div>
-
 										<p className="text-[11px] text-slate-300 leading-normal min-h-[34px]">
 											{slide.description}
 										</p>
@@ -336,7 +214,6 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 						</div>
 					</div>
 
-					{/* High-Visibility Clean Bordered Navigation Elements */}
 					<div className="flex justify-between items-center pb-2 border-b border-slate-950/60 text-[10px] font-mono">
 						<button
 							type="button"
@@ -357,7 +234,6 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 							<span>PREV</span>
 						</button>
 
-						{/* Nav Track Matrix Indicators */}
 						<div className="flex gap-1 items-center">
 							{Array.from({ length: totalAvailableSlides }).map(
 								(_, idx) => (
@@ -397,128 +273,111 @@ export default function WelcomeSpace({ onStartSession }: WelcomeProps) {
 						</button>
 					</div>
 
-					{/* Section C: Parameter Adjustment Modules (High-Contrast Bars) */}
 					<div className="space-y-3.5 pt-1">
-						{/* Inhale */}
-						<div className="space-y-1 relative">
-							<div className="flex justify-between items-center text-[11px]">
-								<label className="text-slate-400">Inhale Phase</label>
-								<span className="text-white font-mono font-bold">
-									{inhale}s
-								</span>
-							</div>
-							<div className="relative w-full h-1 flex items-center">
-								<div
-									ref={inhaleKnobRef}
-									className="absolute w-2.5 h-2.5 bg-white rounded-sm shadow pointer-events-none z-10"
-								/>
-								<input
-									type="range"
-									min="1"
-									max="12"
-									value={inhale}
-									onChange={(e) => setInhale(Number(e.target.value))}
-									className="w-full absolute inset-0 opacity-0 cursor-pointer h-full z-20"
-								/>
-								<div className="w-full h-[3px] bg-slate-800 rounded-sm overflow-hidden relative">
-									<div
-										ref={inhaleTrackRef}
-										className="h-full bg-white absolute left-0 top-0 w-0"
-									/>
-								</div>
-							</div>
-						</div>
+						<CustomSlider
+							label="Inhale Phase"
+							value={inhale}
+							suffix="s"
+							min={1}
+							max={12}
+							onChange={setInhale}
+							knobRef={inhaleKnobRef}
+							trackRef={inhaleTrackRef}
+						/>
+						<CustomSlider
+							label="Hold Phase"
+							value={hold}
+							suffix="s"
+							min={0}
+							max={12}
+							onChange={setHold}
+							knobRef={holdKnobRef}
+							trackRef={holdTrackRef}
+						/>
+						<CustomSlider
+							label="Exhale Phase"
+							value={exhale}
+							suffix="s"
+							min={1}
+							max={16}
+							onChange={setExhale}
+							knobRef={exhaleKnobRef}
+							trackRef={exhaleTrackRef}
+						/>
 
-						{/* Hold */}
-						<div className="space-y-1 relative">
-							<div className="flex justify-between items-center text-[11px]">
-								<label className="text-slate-400">Hold Phase</label>
-								<span className="text-slate-300 font-mono font-bold">
-									{hold}s
-								</span>
-							</div>
-							<div className="relative w-full h-1 flex items-center">
-								<div
-									ref={holdKnobRef}
-									className="absolute w-2.5 h-2.5 bg-white rounded-sm shadow pointer-events-none z-10"
-								/>
-								<input
-									type="range"
-									min="0"
-									max="12"
-									value={hold}
-									onChange={(e) => setHold(Number(e.target.value))}
-									className="w-full absolute inset-0 opacity-0 cursor-pointer h-full z-20"
-								/>
-								<div className="w-full h-[3px] bg-slate-800 rounded-sm overflow-hidden relative">
-									<div
-										ref={holdTrackRef}
-										className="h-full bg-white absolute left-0 top-0 w-0"
-									/>
-								</div>
-							</div>
-						</div>
-
-						{/* Exhale */}
-						<div className="space-y-1 relative">
-							<div className="flex justify-between items-center text-[11px]">
-								<label className="text-slate-400">Exhale Phase</label>
-								<span className="text-slate-300 font-mono font-bold">
-									{exhale}s
-								</span>
-							</div>
-							<div className="relative w-full h-1 flex items-center">
-								<div
-									ref={exhaleKnobRef}
-									className="absolute w-2.5 h-2.5 bg-white rounded-sm shadow pointer-events-none z-10"
-								/>
-								<input
-									type="range"
-									min="1"
-									max="16"
-									value={exhale}
-									onChange={(e) => setExhale(Number(e.target.value))}
-									className="w-full absolute inset-0 opacity-0 cursor-pointer h-full z-20"
-								/>
-								<div className="w-full h-[3px] bg-slate-800 rounded-sm overflow-hidden relative">
-									<div
-										ref={exhaleTrackRef}
-										className="h-full bg-white absolute left-0 top-0 w-0"
-									/>
-								</div>
-							</div>
-						</div>
-
-						{/* Session Duration Selector */}
-						<div className="space-y-1.5 pt-2 border-t border-slate-950/40">
+						<div className="space-y-3 pt-2 border-t border-slate-950/40">
 							<div className="flex justify-between items-center text-[11px]">
 								<label className="text-slate-400">Session Limit</label>
-								<span className="text-slate-200 font-bold">
-									{Math.floor(duration / 60)} min
-								</span>
+								<div className="relative flex bg-slate-950/60 border border-slate-800/60 rounded-md p-0.5">
+									<div
+										className="absolute inset-y-0.5 left-0.5 w-14 rounded bg-slate-700 border border-slate-600 transition-transform duration-300 ease-out"
+										style={{
+											transform:
+												limitType === "reps"
+													? "translateX(100%)"
+													: "translateX(0%)",
+										}}
+									/>
+									<button
+										type="button"
+										onClick={() => setLimitType("duration")}
+										className={`relative z-10 w-14 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+											limitType === "duration"
+												? "text-slate-100"
+												: "text-slate-500 hover:text-slate-300"
+										}`}
+									>
+										Timer
+									</button>
+									<button
+										type="button"
+										onClick={() => setLimitType("reps")}
+										className={`relative z-10 w-14 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+											limitType === "reps"
+												? "text-slate-100"
+												: "text-slate-500 hover:text-slate-300"
+										}`}
+									>
+										Reps
+									</button>
+								</div>
 							</div>
-							<input
-								type="range"
-								min="60"
-								max="900"
-								step="60"
-								value={duration}
-								onChange={(e) => setDuration(Number(e.target.value))}
-								className="w-full h-[3px] bg-slate-800 rounded-sm appearance-none cursor-pointer accent-slate-400"
-							/>
+
+							{limitType === "duration" ? (
+								<CustomSlider
+									label="Duration"
+									value={Math.floor(duration / 60)} // Convert seconds to raw minutes value for display
+									suffix=" min" // Attach the minutes suffix
+									min={1} // Map min to 1 min (60s)
+									max={15} // Map max to 15 mins (900s)
+									step={1} // Step cleanly by 1 minute increments
+									onChange={(mins) => setDuration(mins * 60)} // Convert minutes back to seconds for state tracking
+									knobRef={limitKnobRef}
+									trackRef={limitTrackRef}
+								/>
+							) : (
+								<CustomSlider
+									label="Cycles"
+									value={reps}
+									suffix={reps === 1 ? " cycle" : " cycles"}
+									min={1}
+									max={20}
+									onChange={setReps}
+									knobRef={limitKnobRef}
+									trackRef={limitTrackRef}
+								/>
+							)}
 						</div>
 					</div>
 
 					<button
 						type="submit"
-						className="w-full py-2.5 bg-emerald-400 text-slate-950 font-bold text-[10px] tracking-wider rounded-md uppercase hover:bg-emerald-500 transition-all cursor-pointer mt-1 active:scale-[0.99]"
+						className="w-full py-2.5 bg-emerald-400 text-slate-950 font-bold text-[10px] tracking-wider rounded-md uppercase hover:bg-emerald-500 transition-all cursor-pointer mt-5 active:scale-[0.99]"
 					>
 						Start Session
 					</button>
 				</form>
 			</div>
-
-			{/* --- RESPONSIVE LOW-RADIUS MODAL --- */}
 
 			{isModalOpen && (
 				<SessionInfoModal

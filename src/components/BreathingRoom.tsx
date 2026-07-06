@@ -8,7 +8,7 @@ interface RoomProps {
 }
 
 export default function BreathingRoom({ settings, onExit }: RoomProps) {
-	const { config, limit } = settings;
+	const { variation, config, limit } = settings;
 
 	const phases = useMemo<Phase[]>(() => {
 		const activePhases: Phase[] = [];
@@ -78,19 +78,23 @@ export default function BreathingRoom({ settings, onExit }: RoomProps) {
 				}
 
 				// B. Segment Fill Synchronization
+				// Using Math.round (not Math.floor) means the final segment
+				// crosses its fill threshold at ~95.8% progress instead of
+				// ~99%+, giving it a real window of time to render and paint
+				// before the phase ends, instead of racing the finish line.
 				const activeCount = Math.min(
 					totalSegments,
-					Math.floor(progress * totalSegments),
+					Math.round(progress * totalSegments),
 				);
 
 				sliceRefs.current.forEach((slice, idx) => {
 					if (!slice) return;
 
-					if (idx < activeCount || progress > 0.99) {
-						slice.style.opacity = "0.65";
+					if (idx < activeCount) {
+						gsap.set(slice, { opacity: 0.65 });
 					} else {
 						const baseOpacity = 0.04 + idx * 0.025;
-						slice.style.opacity = String(baseOpacity);
+						gsap.set(slice, { opacity: baseOpacity });
 					}
 				});
 
@@ -148,16 +152,27 @@ export default function BreathingRoom({ settings, onExit }: RoomProps) {
 		circumference,
 	]);
 
-	// Flush background opacities instantly when phases switch
+	// Flush background opacities and arc after a phase completes.
+	// gsap.delayedCall(0, ...) lets GSAP's ticker give the browser one paint
+	// tick to actually render the "fully complete" frame (full arc, filled
+	// last segment) before we reset everything for the next phase. Without
+	// this, the reset happens in the same tick as completion and the
+	// "100% filled" moment never gets painted.
 	useEffect(() => {
-		sliceRefs.current.forEach((slice, idx) => {
-			if (!slice) return;
-			const baseOpacity = 0.04 + idx * 0.025;
-			slice.style.opacity = String(baseOpacity);
+		const call = gsap.delayedCall(0, () => {
+			sliceRefs.current.forEach((slice, idx) => {
+				if (!slice) return;
+				const baseOpacity = 0.04 + idx * 0.025;
+				gsap.set(slice, { opacity: baseOpacity });
+			});
+			if (arcRef.current) {
+				gsap.set(arcRef.current, { strokeDashoffset: circumference });
+			}
 		});
-		if (arcRef.current) {
-			gsap.set(arcRef.current, { strokeDashoffset: circumference });
-		}
+
+		return () => {
+			call.kill();
+		};
 	}, [currentPhaseIdx, circumference]);
 
 	useEffect(() => {
@@ -234,29 +249,41 @@ export default function BreathingRoom({ settings, onExit }: RoomProps) {
 	return (
 		<div className="fixed inset-0 w-screen h-screen bg-slate-950 text-slate-100 font-sans flex flex-col items-center justify-center m-0 p-6 overflow-hidden select-none">
 			{/* Top HUD Row */}
-			<div className="w-full max-w-xs flex justify-between items-center text-sm px-1">
-				<div>
+
+			<div className="w-full border border-slate-800 bg-slate-900/40 px-3 py-2 rounded max-w-sm">
+				<p className="text-[10px] uppercase tracking-widest text-slate-500 font-medium">
+					Active Profile
+				</p>
+				<p className="font-mono text-[#10b981] text-sm tracking-wider uppercase font-bold">
+					{variation.name || "Custom Calibration"}
+				</p>
+			</div>
+
+			{/* Top HUD Row */}
+			<div className="w-full flex items-center text-sm gap-2 mt-2 max-w-sm">
+				<div className="flex-1 border border-slate-800 bg-slate-900/40 px-3 py-2 rounded">
 					<p className="text-[10px] uppercase tracking-widest text-slate-500 font-medium">
 						{limit.type === "duration" ? "Remaining Time" : "Cycles Left"}
 					</p>
-					<p className="font-mono text-slate-200 mt-0.5 text-base font-semibold">
+					<p className="font-mono text-white text-sm tracking-wider uppercase font-bold">
 						{limit.type === "duration"
 							? formatTime(sessionRemaining)
 							: Math.ceil(sessionRemaining)}
 					</p>
 				</div>
-				<div className="text-right">
+
+				<div className="flex-1 border border-slate-800 bg-slate-900/40 px-3 py-2 rounded">
 					<p className="text-[10px] uppercase tracking-widest text-slate-500 font-medium">
 						Session Status
 					</p>
-					<p className="font-mono text-[#10b981] mt-0.5 text-xs tracking-wider uppercase font-bold">
+					<p className="font-mono text-[#10b981] text-sm tracking-wider uppercase font-bold">
 						{isActive ? "Active" : "Paused"}
 					</p>
 				</div>
 			</div>
 
 			{/* Session Progress Gauge */}
-			<div className="w-full max-w-xs h-1 bg-slate-900 border border-slate-800/40 rounded-full mt-3 overflow-hidden">
+			<div className="w-full max-w-sm h-1 bg-slate-900 border border-slate-800/40 rounded-full mt-3 overflow-hidden">
 				<div
 					className="h-full bg-[#10b981] transition-all ease-out duration-300 shadow-[0_0_8px_#10b981]"
 					style={{ width: `${masterProgressRatio * 100}%` }}
@@ -337,7 +364,7 @@ export default function BreathingRoom({ settings, onExit }: RoomProps) {
 			</div>
 
 			{/* Action Interfaces */}
-			<div className="flex flex-col items-center gap-3 w-full max-w-xs">
+			<div className="flex flex-col items-center gap-3 w-full max-w-sm">
 				<button
 					onClick={togglePlayback}
 					className={`w-full py-3.5 rounded-xl font-medium tracking-wide transition-all text-xs cursor-pointer ${
@@ -351,7 +378,7 @@ export default function BreathingRoom({ settings, onExit }: RoomProps) {
 
 				<button
 					onClick={onExit}
-					className="w-full py-2.5 text-[11px] font-bold tracking-widest text-[#ff3333] border border-[#ff3333]/20 hover:border-[#ff3333]/50 hover:bg-[#ff3333]/5 rounded-xl transition-all cursor-pointer uppercase"
+					className="w-full py-2.5 text-[11px] font-bold tracking-widest text-[#ff6666] border border-[#ff6666]/20 hover:border-[#ff3333]/50 hover:bg-[#ff3333]/5 rounded-xl transition-all cursor-pointer uppercase"
 				>
 					Exit Space
 				</button>
